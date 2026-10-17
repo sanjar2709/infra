@@ -1,0 +1,56 @@
+---
+- name: Create monitoring folders
+  ansible.builtin.file:
+    path: "{{ stacks_dir }}/monitoring/{{ item }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0755"   # the containers run as other users
+  loop: ["", alertmanager]
+
+- name: Copy monitoring configs
+  ansible.builtin.copy:
+    src: "{{ stacks_source_dir }}/monitoring/{{ item }}"
+    dest: "{{ stacks_dir }}/monitoring/"
+    owner: "{{ deploy_user }}"
+    mode: "0644"
+    directory_mode: "0755"
+  loop: [compose.yml, prometheus, loki, alloy, grafana]
+  notify: Restart monitoring
+
+# Alertmanager can't read env variables, so the chat id goes straight into its config
+- name: Write the Alertmanager config
+  ansible.builtin.copy:
+    content: >-
+      {{ lookup('ansible.builtin.file', stacks_source_dir ~ '/monitoring/alertmanager/alertmanager.yml')
+         | regex_replace('chat_id: \d+', 'chat_id: ' ~ stacks_alert_chat_id) }}
+    dest: "{{ stacks_dir }}/monitoring/alertmanager/alertmanager.yml"
+    owner: "{{ deploy_user }}"
+    mode: "0644"
+  notify: Restart monitoring
+
+- name: Write the Telegram token for alerts
+  ansible.builtin.copy:
+    content: "{{ stacks_alert_bot_token }}"
+    dest: "{{ stacks_dir }}/monitoring/alertmanager/telegram_token"
+    owner: "{{ deploy_user }}"
+    mode: "0644"   # read by the container user
+  no_log: true
+  notify: Restart monitoring
+
+- name: Write the monitoring settings
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible
+      DOMAIN={{ stacks_domain }}
+      GRAFANA_PASSWORD={{ stacks_grafana_password }}
+    dest: "{{ stacks_dir }}/monitoring/.env"
+    owner: "{{ deploy_user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Start monitoring
+  community.docker.docker_compose_v2:
+    project_src: "{{ stacks_dir }}/monitoring"
+    state: present
+    pull: missing

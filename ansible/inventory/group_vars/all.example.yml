@@ -16,6 +16,10 @@ stacks_apps:
   - taskboard
   - booking-bot
   - docs-assistant
+stacks_monitoring: true
+stacks_grafana_password: "{{ vault_grafana_password }}"
+stacks_alert_bot_token: "{{ vault_alert_bot_token }}"   # from @BotFather
+stacks_alert_chat_id: 123456789                          # your id, @userinfobot shows it
 # Secrets live in vault.yml (ansible-vault create inventory/group_vars/vault.yml) as vault_* variables
 stacks_env:
   shop-api:

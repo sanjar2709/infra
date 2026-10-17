@@ -1,0 +1,16 @@
+# Alerts go to a Telegram chat. Fill in the bot token and chat id
+# (the same bot as booking-bot can be used, or a new one from @BotFather).
+route:
+  receiver: telegram
+  group_by: [alertname]
+  group_wait: 30s
+  repeat_interval: 4h
+
+receivers:
+  - name: telegram
+    telegram_configs:
+      - bot_token_file: /etc/alertmanager/telegram_token
+        # Your chat or group id; the deploy playbook puts stacks_alert_chat_id here
+        chat_id: 123456789
+        parse_mode: HTML
+        send_resolved: true

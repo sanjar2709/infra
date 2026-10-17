@@ -17,6 +17,8 @@ docker rm -f infra-test-server >/dev/null 2>&1 || true
 docker run -d --name infra-test-server --privileged --cgroupns=host \
   -v /sys/fs/cgroup:/sys/fs/cgroup:rw -v /var/lib/docker -v /var/lib/containerd \
   -p 2222:22 infra-test-server >/dev/null
+# node-exporter mounts / with rslave; a real server has / shared already, a container doesn't
+docker exec infra-test-server mount --make-rshared /
 for _ in $(seq 1 30); do ssh-keyscan -p 2222 127.0.0.1 >/dev/null 2>&1 && break; sleep 1; done
 
 cat > "$work/hosts.yml" <<YAML
@@ -55,6 +57,7 @@ ssh_as deploy 'docker run --rm hello-world | grep -m1 "Hello from Docker"'
 echo "--- deploy: the real proxy stack plus a tiny test app"
 mkdir -p "$work/stacks/proxy" "$work/stacks/apps/whoami"
 cp "$here/../proxy/compose.yml" "$work/stacks/proxy/"
+cp -r "$here/../monitoring" "$work/stacks/"
 cat > "$work/stacks/apps/whoami/compose.yml" <<'YAML'
 name: whoami
 services:
@@ -76,6 +79,10 @@ cat >> "$work/hosts.yml" <<YAML
       stacks_env:
         whoami:
           GREETING: hello
+      stacks_monitoring: true
+      stacks_grafana_password: test-pass
+      stacks_alert_bot_token: "123:fake"
+      stacks_alert_chat_id: 42
 YAML
 sed -i 's/ansible_user: root/ansible_user: deploy/' "$work/hosts.yml"
 ansible-playbook -i "$work/hosts.yml" playbooks/deploy.yml
@@ -86,5 +93,17 @@ ssh_as deploy 'cat /opt/stacks/apps/whoami/.env; stat -c "%a %U" /opt/stacks/app
 ssh_as deploy 'curl -sk --resolve whoami.test.local:443:127.0.0.1 https://whoami.test.local/ | grep -m1 Hostname'
 ssh_as deploy 'deploy-app whoami | tail -2'
 if ssh_as deploy 'deploy-app "../../etc"' 2>/dev/null; then echo "FAIL: deploy-app accepted a path"; exit 1; else echo "deploy-app rejects bad names"; fi
+
+echo "--- monitoring"
+ssh_as deploy 'grep chat_id /opt/stacks/monitoring/alertmanager/alertmanager.yml'
+for _ in $(seq 1 30); do
+  ssh_as deploy 'docker exec monitoring-prometheus-1 wget -qO- localhost:9090/api/v1/targets' > "$work/targets.json" 2>/dev/null \
+    && [ "$(grep -o '"health":"up"' "$work/targets.json" | wc -l)" -ge 4 ] && break
+  sleep 5
+done
+grep -o '"job":"[a-z]*"' "$work/targets.json" | sort -u
+[ "$(grep -o '"health":"up"' "$work/targets.json" | wc -l)" -ge 4 ] && echo "all Prometheus targets are up"
+ssh_as deploy 'curl -sk -u admin:test-pass --resolve grafana.test.local:443:127.0.0.1 https://grafana.test.local/api/search' \
+  | grep -o '"title":"[A-Za-z]*"'
 
 echo "ALL CHECKS PASSED"

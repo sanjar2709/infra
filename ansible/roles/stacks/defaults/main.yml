@@ -12,3 +12,8 @@ stacks_env: {}
 stacks_domain: example.com
 stacks_acme_email: admin@example.com
 stacks_dashboard_users: ""
+# Prometheus, Grafana, Loki and Telegram alerts from monitoring/
+stacks_monitoring: false
+stacks_grafana_password: ""
+stacks_alert_bot_token: ""
+stacks_alert_chat_id: 0

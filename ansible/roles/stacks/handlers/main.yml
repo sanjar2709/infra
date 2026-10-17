@@ -1,0 +1,6 @@
+---
+# Configs are bind-mounted, so a changed file needs a restart to be picked up
+- name: Restart monitoring
+  community.docker.docker_compose_v2:
+    project_src: "{{ stacks_dir }}/monitoring"
+    state: restarted

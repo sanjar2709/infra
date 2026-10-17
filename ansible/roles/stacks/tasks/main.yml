@@ -42,3 +42,7 @@
   loop: "{{ stacks_apps }}"
   loop_control:
     loop_var: stack_name
+
+- name: Deploy monitoring
+  ansible.builtin.include_tasks: monitoring.yml
+  when: stacks_monitoring

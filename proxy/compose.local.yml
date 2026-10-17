@@ -7,6 +7,9 @@ services:
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=proxy
       - --entrypoints.websecure.address=:80
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entrypoint=metrics
+      - --entrypoints.metrics.address=:8082
       - --api.dashboard=true
       - --api.insecure=true
     ports: !override

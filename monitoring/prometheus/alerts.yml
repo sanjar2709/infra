@@ -1,0 +1,51 @@
+groups:
+  - name: server
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} is not answering"
+
+      - alert: DiskAlmostFull
+        expr: >
+          1 - node_filesystem_avail_bytes{mountpoint="/", fstype!="rootfs"}
+          / node_filesystem_size_bytes{mountpoint="/", fstype!="rootfs"} > 0.85
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Disk is {{ $value | humanizePercentage }} full"
+
+      - alert: LowMemory
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Only {{ $value | humanizePercentage }} of memory is free"
+
+      - alert: HighCpu
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.90
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "CPU has been above 90% for 15 minutes"
+
+  - name: containers
+    rules:
+      - alert: ContainerRestarting
+        expr: changes(container_start_time_seconds{name!=""}[15m]) > 2
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.name }} restarted more than twice in 15 minutes"
+
+  - name: traffic
+    rules:
+      - alert: ManyServerErrors
+        expr: >
+          sum by (service) (rate(traefik_service_requests_total{code=~"5.."}[5m]))
+          / sum by (service) (rate(traefik_service_requests_total[5m])) > 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.service }}: {{ $value | humanizePercentage }} of requests fail with 5xx"
