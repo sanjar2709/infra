@@ -1,0 +1,14 @@
+---
+# First run on a fresh server, as root:
+#   ansible-playbook playbooks/setup.yml
+# It creates the deploy user and closes root login, so later runs use -u deploy.
+- name: Prepare the server
+  hosts: all
+  become: true
+  roles:
+    - base
+    - users
+    - ssh
+    - firewall
+    - fail2ban
+    - docker

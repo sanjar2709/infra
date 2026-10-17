@@ -1,0 +1,10 @@
+---
+timezone: Asia/Tashkent
+swap_size_mb: 2048
+base_packages:
+  - ca-certificates
+  - curl
+  - git
+  - htop
+  - jq
+  - unattended-upgrades

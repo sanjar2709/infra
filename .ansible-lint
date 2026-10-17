@@ -1,0 +1,11 @@
+profile: production
+exclude_paths:
+  - .venv/
+  - .github/
+  - monitoring/
+  - proxy/
+  - apps/
+skip_list:
+  # deploy_user and ssh_port are shared by several roles on purpose and set once in the inventory;
+  # a per-role prefix would mean repeating the same value for every role
+  - var-naming[no-role-prefix]

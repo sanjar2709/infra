@@ -1,0 +1,7 @@
+# Copy to all.yml and fill in. This file is not committed.
+deploy_user: deploy
+# The public key you'll log in with (cat ~/.ssh/id_ed25519.pub)
+deploy_ssh_public_key: "ssh-ed25519 AAAA... you@laptop"
+timezone: Asia/Tashkent
+swap_size_mb: 2048
+ssh_port: 22

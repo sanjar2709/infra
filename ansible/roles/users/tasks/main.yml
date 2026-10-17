@@ -1,0 +1,25 @@
+---
+- name: Check that a public key is set
+  ansible.builtin.assert:
+    that: deploy_ssh_public_key | length > 0
+    fail_msg: Set deploy_ssh_public_key in group_vars/all.yml, otherwise you lock yourself out
+
+- name: Create the deploy user
+  ansible.builtin.user:
+    name: "{{ deploy_user }}"
+    shell: /bin/bash
+    groups: sudo
+    append: true
+
+- name: Add the SSH key
+  ansible.posix.authorized_key:
+    user: "{{ deploy_user }}"
+    key: "{{ deploy_ssh_public_key }}"
+    exclusive: true
+
+- name: Allow sudo without a password for the deploy user
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ deploy_user }}"
+    content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    mode: "0440"
+    validate: visudo -cf %s

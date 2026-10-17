@@ -1,0 +1,58 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+
+- name: Turn on automatic security updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: "0644"
+
+# Small VPS plans have 1-2 GB of RAM; swap keeps builds and the embedding model from being killed
+- name: Check for a swap file
+  ansible.builtin.stat:
+    path: /swapfile
+  register: swapfile
+
+- name: Create swap file
+  when: not swapfile.stat.exists and swap_size_mb | int > 0
+  block:
+    - name: Allocate swap file
+      ansible.builtin.command: "fallocate -l {{ swap_size_mb }}M /swapfile"
+      changed_when: true
+
+    - name: Restrict swap file permissions
+      ansible.builtin.file:
+        path: /swapfile
+        mode: "0600"
+
+    - name: Format swap file
+      ansible.builtin.command: mkswap /swapfile
+      changed_when: true
+
+    - name: Enable swap file
+      ansible.builtin.command: swapon /swapfile
+      changed_when: true
+      failed_when: false   # not allowed inside containers, fine on a real server
+
+- name: Mount swap on boot
+  ansible.posix.mount:
+    name: none
+    src: /swapfile
+    fstype: swap
+    opts: sw
+    state: present
+  when: swap_size_mb | int > 0

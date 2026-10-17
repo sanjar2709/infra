@@ -1,0 +1,21 @@
+---
+- name: Install ufw
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+
+- name: Allow SSH, HTTP and HTTPS
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "{{ ssh_port }}"
+    - "80"
+    - "443"
+
+- name: Deny everything else and turn the firewall on
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
