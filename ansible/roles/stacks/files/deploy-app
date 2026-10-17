@@ -3,12 +3,26 @@
 #   deploy-app taskboard [tag]
 set -euo pipefail
 
+# For the CI key this script is a forced command, and what CI asked for comes in SSH_ORIGINAL_COMMAND
+if [[ $# -eq 0 && -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
+  read -r command app tag extra <<< "$SSH_ORIGINAL_COMMAND"
+  if [[ "$command" != deploy-app || -n "$extra" ]]; then
+    echo "this key can only run: deploy-app <app> [tag]" >&2
+    exit 1
+  fi
+  set -- "$app" ${tag:+"$tag"}
+fi
+
 app="${1:?usage: deploy-app <app> [tag]}"
 tag="${2:-latest}"
 dir="/opt/stacks/apps/$app"
 
 if [[ ! "$app" =~ ^[a-z0-9-]+$ ]] || [[ ! -f "$dir/compose.yml" ]]; then
   echo "unknown app: $app" >&2
+  exit 1
+fi
+if [[ ! "$tag" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "bad tag: $tag" >&2
   exit 1
 fi
 

@@ -11,10 +11,15 @@
     groups: sudo
     append: true
 
-- name: Add the SSH key
+# The CI key, if there is one, can only run deploy-app: no shell, no forwarding, no sudo
+- name: Add the SSH keys
   ansible.posix.authorized_key:
     user: "{{ deploy_user }}"
-    key: "{{ deploy_ssh_public_key }}"
+    key: |
+      {{ deploy_ssh_public_key }}
+      {% if deploy_ci_ssh_public_key %}
+      restrict,command="/usr/local/bin/deploy-app" {{ deploy_ci_ssh_public_key }}
+      {% endif %}
     exclusive: true
 
 - name: Allow sudo without a password for the deploy user

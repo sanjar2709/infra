@@ -8,6 +8,7 @@ work="$(mktemp -d)"
 trap 'docker rm -f -v infra-test-server >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 
 ssh-keygen -q -t ed25519 -N '' -f "$work/id_test"
+ssh-keygen -q -t ed25519 -N '' -f "$work/id_ci"
 cp "$work/id_test.pub" "$here/server/id_test.pub"
 docker build -q -t infra-test-server "$here/server" >/dev/null
 rm "$here/server/id_test.pub"
@@ -32,6 +33,7 @@ all:
       ansible_ssh_common_args: -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
       deploy_user: deploy
       deploy_ssh_public_key: "$(cat "$work/id_test.pub")"
+      deploy_ci_ssh_public_key: "$(cat "$work/id_ci.pub")"
       swap_size_mb: 0
 YAML
 
@@ -45,6 +47,10 @@ grep -q 'changed=0' "$work/second.log"
 ssh_as() {
   ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes \
     -i "$work/id_test" -p 2222 "$1@127.0.0.1" "${@:2}"
+}
+ssh_ci() {
+  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes \
+    -i "$work/id_ci" -p 2222 deploy@127.0.0.1 "$@"
 }
 
 echo "--- checks"
@@ -111,6 +117,13 @@ ssh_as deploy 'cat /opt/stacks/apps/whoami/.env; stat -c "%a %U" /opt/stacks/app
 ssh_as deploy 'curl -sk --resolve whoami.test.local:443:127.0.0.1 https://whoami.test.local/ | grep -m1 Hostname'
 ssh_as deploy 'deploy-app whoami | tail -2'
 if ssh_as deploy 'deploy-app "../../etc"' 2>/dev/null; then echo "FAIL: deploy-app accepted a path"; exit 1; else echo "deploy-app rejects bad names"; fi
+ssh_ci deploy-app whoami | tail -1
+# shellcheck disable=SC2016  # the $(id) must reach the server unexpanded
+for command in 'id' 'deploy-app whoami; id' 'deploy-app whoami latest extra' 'deploy-app whoami $(id)'; do
+  if ssh_ci "$command" 2>/dev/null | grep -q uid=; then echo "FAIL: CI key ran: $command"; exit 1; fi
+done
+answer="$(ssh_ci 'id' 2>&1 || true)"
+grep -q 'can only run' <<< "$answer" && echo "CI key is limited to deploy-app"
 
 echo "--- monitoring"
 ssh_as deploy 'grep chat_id /opt/stacks/monitoring/alertmanager/alertmanager.yml'

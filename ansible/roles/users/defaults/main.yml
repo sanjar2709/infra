@@ -1,3 +1,5 @@
 ---
 deploy_user: deploy
 deploy_ssh_public_key: ""
+# Key for GitHub Actions; it is locked to the deploy-app command
+deploy_ci_ssh_public_key: ""

@@ -2,6 +2,8 @@
 deploy_user: deploy
 # The public key you'll log in with (cat ~/.ssh/id_ed25519.pub)
 deploy_ssh_public_key: "ssh-ed25519 AAAA... you@laptop"
+# Optional, for GitHub Actions: ssh-keygen -t ed25519 -f ci_key, the private half goes to DEPLOY_SSH_KEY
+deploy_ci_ssh_public_key: ""
 timezone: Asia/Tashkent
 swap_size_mb: 2048
 ssh_port: 22
