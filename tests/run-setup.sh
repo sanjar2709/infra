@@ -5,18 +5,18 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 work="$(mktemp -d)"
-trap 'docker rm -f -v infra-target >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+trap 'docker rm -f -v infra-test-server >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 
 ssh-keygen -q -t ed25519 -N '' -f "$work/id_test"
-cp "$work/id_test.pub" "$here/target/id_test.pub"
-docker build -q -t infra-target "$here/target" >/dev/null
-rm "$here/target/id_test.pub"
+cp "$work/id_test.pub" "$here/server/id_test.pub"
+docker build -q -t infra-test-server "$here/server" >/dev/null
+rm "$here/server/id_test.pub"
 
-docker rm -f infra-target >/dev/null 2>&1 || true
+docker rm -f infra-test-server >/dev/null 2>&1 || true
 # Docker inside the target needs its data on a real volume: overlayfs can't sit on top of overlayfs
-docker run -d --name infra-target --privileged --cgroupns=host \
+docker run -d --name infra-test-server --privileged --cgroupns=host \
   -v /sys/fs/cgroup:/sys/fs/cgroup:rw -v /var/lib/docker -v /var/lib/containerd \
-  -p 2222:22 infra-target >/dev/null
+  -p 2222:22 infra-test-server >/dev/null
 for _ in $(seq 1 30); do ssh-keyscan -p 2222 127.0.0.1 >/dev/null 2>&1 && break; sleep 1; done
 
 cat > "$work/hosts.yml" <<YAML
