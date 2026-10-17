@@ -1,0 +1,62 @@
+name: taskboard
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [internal]
+
+  backend:
+    image: ghcr.io/sanjar2709/taskboard-backend:${TAG:-latest}
+    restart: unless-stopped
+    command: sh -c "alembic upgrade head && gunicorn main:app --worker-class uvicorn_worker.UvicornWorker --workers 2 --bind 0.0.0.0:8000"
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      ALLOWED_ORIGINS: https://taskboard.${DOMAIN}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal, proxy]
+    labels:
+      - traefik.enable=true
+      # API and WebSocket live under /api on the same host as the frontend
+      - traefik.http.routers.taskboard-api.rule=Host(`taskboard.${DOMAIN}`) && PathPrefix(`/api`)
+      - traefik.http.services.taskboard-api.loadbalancer.server.port=8000
+
+  frontend:
+    image: ghcr.io/sanjar2709/taskboard-frontend:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NUXT_PUBLIC_API_BASE_URL: https://taskboard.${DOMAIN}/api/v1/
+      NUXT_PUBLIC_WS_BASE_URL: wss://taskboard.${DOMAIN}/api/v1/
+    networks: [proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.taskboard.rule=Host(`taskboard.${DOMAIN}`)
+      - traefik.http.services.taskboard.loadbalancer.server.port=3000
+
+volumes:
+  postgres_data:
+
+networks:
+  internal:
+  proxy:
+    external: true

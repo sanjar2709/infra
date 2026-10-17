@@ -1,0 +1,75 @@
+name: docs-assistant
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [internal]
+
+  backend:
+    image: ghcr.io/sanjar2709/docs-assistant-backend:${TAG:-latest}
+    restart: unless-stopped
+    command: sh -c "alembic upgrade head && gunicorn main:app --worker-class uvicorn_worker.UvicornWorker --workers 2 --bind 0.0.0.0:8000"
+    env_file: .env
+    environment: &backend-env
+      DB_HOST: db
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      MEDIA_DIR: /data/media
+      EMBEDDING_CACHE_DIR: /data/models
+      ALLOWED_ORIGINS: https://docs.${DOMAIN}
+    volumes:
+      - app_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal, proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.docs-api.rule=Host(`docs.${DOMAIN}`) && PathPrefix(`/api`)
+      - traefik.http.services.docs-api.loadbalancer.server.port=8000
+
+  worker:
+    image: ghcr.io/sanjar2709/docs-assistant-backend:${TAG:-latest}
+    restart: unless-stopped
+    command: arq worker.WorkerSettings
+    env_file: .env
+    environment: *backend-env
+    volumes:
+      - app_data:/data
+    depends_on: [backend]
+    networks: [internal]
+
+  frontend:
+    image: ghcr.io/sanjar2709/docs-assistant-frontend:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NUXT_PUBLIC_API_BASE_URL: https://docs.${DOMAIN}/api/v1/
+    networks: [proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.docs.rule=Host(`docs.${DOMAIN}`)
+      - traefik.http.services.docs.loadbalancer.server.port=3000
+
+volumes:
+  postgres_data:
+  app_data:
+
+networks:
+  internal:
+  proxy:
+    external: true

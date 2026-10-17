@@ -1,0 +1,14 @@
+# Local testing only: plain HTTP on :8080, no Let's Encrypt.
+#   docker compose -f compose.yml -f compose.local.yml up -d
+services:
+  traefik:
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=proxy
+      - --entrypoints.websecure.address=:80
+      - --api.dashboard=true
+      - --api.insecure=true
+    ports: !override
+      - "8080:80"
+      - "8081:8080"

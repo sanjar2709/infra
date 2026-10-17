@@ -1,0 +1,69 @@
+name: shop-api
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [internal]
+
+  web:
+    image: ghcr.io/sanjar2709/shop-api:${TAG:-latest}
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    env_file: .env
+    environment: &app-env
+      DEBUG: "0"
+      DB_HOST: db
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      ALLOWED_HOSTS: shop-api.${DOMAIN}
+      CSRF_TRUSTED_ORIGINS: https://shop-api.${DOMAIN}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal, proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.shop-api.rule=Host(`shop-api.${DOMAIN}`)
+      - traefik.http.services.shop-api.loadbalancer.server.port=8000
+
+  worker:
+    image: ghcr.io/sanjar2709/shop-api:${TAG:-latest}
+    restart: unless-stopped
+    command: celery -A core worker -l info
+    env_file: .env
+    environment: *app-env
+    depends_on: [web]
+    networks: [internal]
+
+  beat:
+    image: ghcr.io/sanjar2709/shop-api:${TAG:-latest}
+    restart: unless-stopped
+    command: celery -A core beat -l info --schedule /tmp/celerybeat-schedule
+    env_file: .env
+    environment: *app-env
+    depends_on: [web]
+    networks: [internal]
+
+volumes:
+  postgres_data:
+
+networks:
+  internal:
+  proxy:
+    external: true
