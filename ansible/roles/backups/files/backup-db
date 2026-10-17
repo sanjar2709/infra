@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Dumps the database of every app that has a "db" service. Run by backup-db.timer every night,
+# or by hand: backup-db [app]
+set -euo pipefail
+
+stacks="/opt/stacks/apps"
+target="${BACKUP_DIR:-/var/backups/postgres}"
+keep_days="${BACKUP_KEEP_DAYS:-7}"
+# node-exporter reads *.prom files from here, so Prometheus knows when the last good backup was
+metrics="/var/lib/node_exporter"
+
+apps=("${1:-}")
+if [[ -z "${apps[0]}" ]]; then
+  mapfile -t apps < <(find "$stacks" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+fi
+
+failed=0
+mkdir -p "$target" "$metrics"
+for app in "${apps[@]}"; do
+  cd "$stacks/$app" || { echo "unknown app: $app" >&2; failed=1; continue; }
+  # Skip apps without a running database
+  [[ -n "$(docker compose ps -q db 2>/dev/null)" ]] || continue
+
+  mkdir -p "$target/$app"
+  file="$target/$app/$app-$(date +%F_%H%M).dump"
+  # Custom format: compressed, and pg_restore can pick single tables out of it.
+  # Written to .part first, so a broken dump never looks like a good one
+  if docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$file.part"; then
+    mv "$file.part" "$file"
+    echo "$app: $(du -h "$file" | cut -f1) -> $file"
+    echo "backup_last_success_timestamp_seconds{app=\"$app\"} $(date +%s)" > "$metrics/backup-$app.prom.tmp"
+    mv "$metrics/backup-$app.prom.tmp" "$metrics/backup-$app.prom"
+  else
+    rm -f "$file.part"
+    echo "$app: backup FAILED" >&2
+    failed=1
+  fi
+  find "$target/$app" -name '*.dump' -mtime +"$keep_days" -delete
+done
+
+exit "$failed"

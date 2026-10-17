@@ -72,13 +72,31 @@ networks:
   proxy:
     external: true
 YAML
+# An app with a database, for the backup checks; pgvector like docs-assistant, so extensions are covered too
+mkdir -p "$work/stacks/apps/notes"
+cat > "$work/stacks/apps/notes/compose.yml" <<'YAML'
+name: notes
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+  web:
+    image: traefik/whoami:v1.11
+YAML
 cat >> "$work/hosts.yml" <<YAML
       stacks_source_dir: $work/stacks
       stacks_domain: test.local
-      stacks_apps: [whoami]
+      stacks_apps: [whoami, notes]
       stacks_env:
         whoami:
           GREETING: hello
+        notes:
+          DB_NAME: notes
+          DB_USER: notes
+          DB_PASSWORD: notes-pass
       stacks_monitoring: true
       stacks_grafana_password: test-pass
       stacks_alert_bot_token: "123:fake"
@@ -105,5 +123,23 @@ grep -o '"job":"[a-z]*"' "$work/targets.json" | sort -u
 [ "$(grep -o '"health":"up"' "$work/targets.json" | wc -l)" -ge 4 ] && echo "all Prometheus targets are up"
 ssh_as deploy 'curl -sk -u admin:test-pass --resolve grafana.test.local:443:127.0.0.1 https://grafana.test.local/api/search' \
   | grep -o '"title":"[A-Za-z]*"'
+
+echo "--- backups"
+ssh_as deploy 'systemctl is-enabled backup-db.timer; systemctl list-timers backup-db.timer --no-pager | head -2'
+psql_notes() { ssh_as deploy "cd /opt/stacks/apps/notes && docker compose exec -T db psql -U notes -tAc \"$1\""; }
+for _ in $(seq 1 30); do psql_notes 'select 1' >/dev/null 2>&1 && break; sleep 2; done
+psql_notes 'create extension vector; create table note (id serial primary key, body text, embedding vector(3))'
+psql_notes "insert into note (body, embedding) values ('keep me', '[1,2,3]')"
+ssh_as deploy 'sudo systemctl start backup-db.service && sudo journalctl -u backup-db.service -o cat --no-pager | tail -1'
+ssh_as deploy 'sudo ls /var/backups/postgres/notes; cat /var/lib/node_exporter/backup-notes.prom'
+psql_notes 'drop table note'
+ssh_as deploy 'sudo restore-db notes'
+[ "$(psql_notes 'select body from note')" = "keep me" ] && echo "restored row is back"
+ssh_as deploy 'cd /opt/stacks/apps/notes && docker compose ps --format "{{.Service}} {{.State}}"'
+for _ in $(seq 1 12); do
+  ssh_as deploy 'docker exec monitoring-prometheus-1 wget -qO- "localhost:9090/api/v1/query?query=backup_last_success_timestamp_seconds"' \
+    | grep -q '"app":"notes"' && echo "Prometheus sees the backup time" && break
+  sleep 5
+done
 
 echo "ALL CHECKS PASSED"

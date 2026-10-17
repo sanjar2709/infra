@@ -1,0 +1,10 @@
+[Unit]
+Description=Dump the app databases
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=BACKUP_DIR={{ backups_dir }}
+Environment=BACKUP_KEEP_DAYS={{ backups_keep_days }}
+ExecStart=/usr/local/bin/backup-db

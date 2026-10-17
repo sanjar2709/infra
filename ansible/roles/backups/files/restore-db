@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Puts a backup back into an app's database. The app is stopped while it runs.
+#   restore-db taskboard                                   newest backup
+#   restore-db taskboard /var/backups/postgres/taskboard/taskboard-2026-10-17_0300.dump
+set -euo pipefail
+
+app="${1:?usage: restore-db <app> [file]}"
+dir="/opt/stacks/apps/$app"
+target="${BACKUP_DIR:-/var/backups/postgres}"
+
+if [[ ! "$app" =~ ^[a-z0-9-]+$ ]] || [[ ! -f "$dir/compose.yml" ]]; then
+  echo "unknown app: $app" >&2
+  exit 1
+fi
+file="${2:-$(find "$target/$app" -name '*.dump' 2>/dev/null | sort | tail -1)}"
+if [[ ! -f "$file" ]]; then
+  echo "no backup found for $app" >&2
+  exit 1
+fi
+
+cd "$dir"
+echo "restoring $app from $file"
+mapfile -t services < <(docker compose config --services | grep -vx db)
+docker compose stop "${services[@]}"
+# --clean drops what's there first; the dump owns the schema completely
+docker compose exec -T db sh -c 'pg_restore --clean --if-exists --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$file"
+docker compose start "${services[@]}"
+echo "done"

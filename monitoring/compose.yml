@@ -28,6 +28,8 @@ services:
     restart: unless-stopped
     command:
       - --path.rootfs=/host
+      # backup-db leaves its last success time here
+      - --collector.textfile.directory=/host/var/lib/node_exporter
     pid: host
     volumes:
       - /:/host:ro,rslave

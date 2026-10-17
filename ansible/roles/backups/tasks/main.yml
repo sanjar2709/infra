@@ -1,0 +1,32 @@
+---
+- name: Create the backup folder
+  ansible.builtin.file:
+    path: "{{ backups_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the backup and restore scripts
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    mode: "0755"
+  loop: [backup-db, restore-db]
+
+- name: Install the systemd unit and timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop: [backup-db.service, backup-db.timer]
+  notify: Reload systemd
+
+- name: Flush handlers so systemd knows the new units
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the nightly backup
+  ansible.builtin.systemd_service:
+    name: backup-db.timer
+    enabled: true
+    state: started

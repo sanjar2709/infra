@@ -1,0 +1,5 @@
+---
+backups_dir: /var/backups/postgres
+backups_keep_days: 7
+# systemd OnCalendar format, server time
+backups_time: "*-*-* 03:00:00"

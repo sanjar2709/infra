@@ -39,6 +39,14 @@ groups:
         annotations:
           summary: "{{ $labels.name }} restarted more than twice in 15 minutes"
 
+  - name: backups
+    rules:
+      - alert: BackupTooOld
+        expr: time() - backup_last_success_timestamp_seconds > 26 * 3600
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.app }}: the last good database backup is {{ $value | humanizeDuration }} old"
+
   - name: traffic
     rules:
       - alert: ManyServerErrors
