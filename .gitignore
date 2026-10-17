@@ -278,3 +278,6 @@ ansible/inventory/group_vars/all.yml
 
 # Real Telegram token for Alertmanager
 monitoring/alertmanager/telegram_token
+
+# ansible-lint cache
+.ansible/

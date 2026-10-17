@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: ansible-galaxy collection install -r ansible/requirements.yml
+      - run: yamllint .
+      - name: ansible-lint
+        working-directory: ansible
+        run: ansible-lint -c ../.ansible-lint
+      - run: shellcheck tests/*.sh ansible/roles/*/files/*
+      - name: Compose files are valid
+        run: |
+          for dir in proxy monitoring apps/*; do
+            cp "$dir/.env.example" "$dir/.env"
+            docker compose -f "$dir/compose.yml" config --quiet
+            echo "ok: $dir"
+          done
+      - name: Prometheus and Alertmanager configs
+        run: |
+          docker run --rm -v "$PWD/monitoring/prometheus:/p" --entrypoint promtool prom/prometheus:v3.5.0 check config /p/prometheus.yml
+          cp monitoring/alertmanager/telegram_token.example monitoring/alertmanager/telegram_token
+          docker run --rm -v "$PWD/monitoring/alertmanager:/etc/alertmanager" --entrypoint amtool prom/alertmanager:v0.28.1 \
+            check-config /etc/alertmanager/alertmanager.yml
+
+  # Runs both playbooks against a fresh Ubuntu container and checks the result, about 10 minutes
+  server:
+    runs-on: ubuntu-24.04
+    needs: lint
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: ansible-galaxy collection install -r ansible/requirements.yml
+      - run: tests/run-server-tests.sh
