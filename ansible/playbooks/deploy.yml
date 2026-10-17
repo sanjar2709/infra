@@ -1,0 +1,9 @@
+---
+# Puts the proxy and the apps on the server and starts them:
+#   ansible-playbook playbooks/deploy.yml --ask-vault-pass
+# Day-to-day releases don't need this: CD calls deploy-app over SSH.
+- name: Deploy the stacks
+  hosts: all
+  become: true
+  roles:
+    - stacks

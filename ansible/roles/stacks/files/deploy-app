@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Pull the newest images of one app and restart what changed. Used by CD over SSH:
+#   deploy-app taskboard [tag]
+set -euo pipefail
+
+app="${1:?usage: deploy-app <app> [tag]}"
+tag="${2:-latest}"
+dir="/opt/stacks/apps/$app"
+
+if [[ ! "$app" =~ ^[a-z0-9-]+$ ]] || [[ ! -f "$dir/compose.yml" ]]; then
+  echo "unknown app: $app" >&2
+  exit 1
+fi
+
+cd "$dir"
+export TAG="$tag"
+docker compose pull --quiet
+docker compose up -d --remove-orphans
+docker image prune -f >/dev/null
+docker compose ps

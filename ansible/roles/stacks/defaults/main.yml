@@ -1,0 +1,14 @@
+---
+stacks_dir: /opt/stacks
+# Where proxy/ and apps/ are read from: the root of this repository
+stacks_source_dir: "{{ playbook_dir }}/../.."
+# Apps to start; the compose file of each comes from apps/<name>/compose.yml in this repo
+stacks_apps: []
+# Per-app settings that end up in /opt/stacks/<app>/.env, secrets come from the vault:
+# stacks_env:
+#   taskboard:
+#     SECRET_KEY: "{{ vault_taskboard_secret_key }}"
+stacks_env: {}
+stacks_domain: example.com
+stacks_acme_email: admin@example.com
+stacks_dashboard_users: ""

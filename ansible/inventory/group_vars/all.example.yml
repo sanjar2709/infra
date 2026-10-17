@@ -5,3 +5,26 @@ deploy_ssh_public_key: "ssh-ed25519 AAAA... you@laptop"
 timezone: Asia/Tashkent
 swap_size_mb: 2048
 ssh_port: 22
+
+# Deploy (playbooks/deploy.yml)
+stacks_domain: example.com
+stacks_acme_email: you@example.com
+stacks_dashboard_users: "admin:$2y$05$..."   # htpasswd -nB admin
+stacks_apps:
+  - shop-api
+  - booking-service
+  - taskboard
+  - booking-bot
+  - docs-assistant
+# Secrets live in vault.yml (ansible-vault create inventory/group_vars/vault.yml) as vault_* variables
+stacks_env:
+  shop-api:
+    SECRET_KEY: "{{ vault_shop_api_secret_key }}"
+    DB_NAME: shop
+    DB_USER: shop
+    DB_PASSWORD: "{{ vault_shop_api_db_password }}"
+  taskboard:
+    SECRET_KEY: "{{ vault_taskboard_secret_key }}"
+    DB_NAME: taskboard
+    DB_USER: taskboard
+    DB_PASSWORD: "{{ vault_taskboard_db_password }}"

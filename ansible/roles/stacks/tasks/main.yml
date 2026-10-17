@@ -1,0 +1,44 @@
+---
+- name: Create stack folders
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0750"
+  loop:
+    - "{{ stacks_dir }}"
+    - "{{ stacks_dir }}/proxy"
+    - "{{ stacks_dir }}/apps"
+
+- name: Install the deploy-app script
+  ansible.builtin.copy:
+    src: deploy-app
+    dest: /usr/local/bin/deploy-app
+    mode: "0755"
+
+- name: Copy the proxy stack
+  ansible.builtin.copy:
+    src: "{{ stacks_source_dir }}/proxy/compose.yml"
+    dest: "{{ stacks_dir }}/proxy/compose.yml"
+    owner: "{{ deploy_user }}"
+    mode: "0640"
+
+- name: Write the proxy settings
+  ansible.builtin.template:
+    src: proxy.env.j2
+    dest: "{{ stacks_dir }}/proxy/.env"
+    owner: "{{ deploy_user }}"
+    mode: "0600"
+
+- name: Start the proxy
+  community.docker.docker_compose_v2:
+    project_src: "{{ stacks_dir }}/proxy"
+    state: present
+    pull: missing
+
+- name: Deploy apps
+  ansible.builtin.include_tasks: app.yml
+  loop: "{{ stacks_apps }}"
+  loop_control:
+    loop_var: stack_name

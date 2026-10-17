@@ -1,0 +1,29 @@
+---
+- name: "Create the folder for {{ stack_name }}"
+  ansible.builtin.file:
+    path: "{{ stacks_dir }}/apps/{{ stack_name }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0750"
+
+- name: "Copy the compose file of {{ stack_name }}"
+  ansible.builtin.copy:
+    src: "{{ stacks_source_dir }}/apps/{{ stack_name }}/compose.yml"
+    dest: "{{ stacks_dir }}/apps/{{ stack_name }}/compose.yml"
+    owner: "{{ deploy_user }}"
+    mode: "0640"
+
+- name: "Write the settings of {{ stack_name }}"
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ stacks_dir }}/apps/{{ stack_name }}/.env"
+    owner: "{{ deploy_user }}"
+    mode: "0600"
+  no_log: true   # secrets
+
+- name: "Start {{ stack_name }}"
+  community.docker.docker_compose_v2:
+    project_src: "{{ stacks_dir }}/apps/{{ stack_name }}"
+    state: present
+    pull: always

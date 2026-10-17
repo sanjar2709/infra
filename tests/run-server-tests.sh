@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs playbooks/setup.yml against a throwaway Ubuntu container and checks the result.
-# Usage: tests/run-setup.sh   (needs Docker; the container is removed at the end)
+# Runs playbooks/setup.yml and playbooks/deploy.yml against a throwaway Ubuntu container
+# and checks the result. Usage: tests/run-server-tests.sh   (needs Docker; everything is removed at the end)
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -52,4 +52,39 @@ ssh_as deploy 'sudo sshd -T | grep -E "^(passwordauthentication|permitrootlogin)
 ssh_as deploy 'sudo ufw status | head -6'
 ssh_as deploy 'systemctl is-active fail2ban docker'
 ssh_as deploy 'docker run --rm hello-world | grep -m1 "Hello from Docker"'
+echo "--- deploy: the real proxy stack plus a tiny test app"
+mkdir -p "$work/stacks/proxy" "$work/stacks/apps/whoami"
+cp "$here/../proxy/compose.yml" "$work/stacks/proxy/"
+cat > "$work/stacks/apps/whoami/compose.yml" <<'YAML'
+name: whoami
+services:
+  whoami:
+    image: traefik/whoami:v1.11
+    networks: [proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.whoami.rule=Host(`whoami.${DOMAIN}`)
+      - traefik.http.routers.whoami.tls=false
+networks:
+  proxy:
+    external: true
+YAML
+cat >> "$work/hosts.yml" <<YAML
+      stacks_source_dir: $work/stacks
+      stacks_domain: test.local
+      stacks_apps: [whoami]
+      stacks_env:
+        whoami:
+          GREETING: hello
+YAML
+sed -i 's/ansible_user: root/ansible_user: deploy/' "$work/hosts.yml"
+ansible-playbook -i "$work/hosts.yml" playbooks/deploy.yml
+
+ssh_as deploy 'docker ps --format "{{.Names}}" | sort'
+ssh_as deploy 'cat /opt/stacks/apps/whoami/.env; stat -c "%a %U" /opt/stacks/apps/whoami/.env'
+# Port 80 redirects to HTTPS, which proves Traefik is routing; follow it with a self-signed cert
+ssh_as deploy 'curl -sk --resolve whoami.test.local:443:127.0.0.1 https://whoami.test.local/ | grep -m1 Hostname'
+ssh_as deploy 'deploy-app whoami | tail -2'
+if ssh_as deploy 'deploy-app "../../etc"' 2>/dev/null; then echo "FAIL: deploy-app accepted a path"; exit 1; else echo "deploy-app rejects bad names"; fi
+
 echo "ALL CHECKS PASSED"
